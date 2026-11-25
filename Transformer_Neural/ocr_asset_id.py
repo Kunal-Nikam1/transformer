@@ -1,11 +1,3 @@
-"""
-TCS Autonomous Asset Inspection System.
-Asset ID Plate Detection & OCR Text Verification Module.
-
-Uses GPU-accelerated EasyOCR (local weights in easyocr_models) plus a tolerant
-but strict-on-structure matcher to verify asset ID plates (TR-1, TR-2, CB-1, CS-02).
-Rejects false positives from background objects, furniture, and noise.
-"""
 
 import os
 import re
@@ -77,7 +69,7 @@ def _is_exact_id(text: str) -> bool:
 class AssetIDDetector:
     """Robust OCR engine for reading and verifying substation asset ID plates."""
 
-    MIN_CONF = 0.15          # min per-segment OCR confidence to accept a match
+    MIN_CONF = 0.40          # min per-segment OCR confidence to accept a match
     EARLY_EXIT_CONF = 0.70   # stop trying extra preprocessing variants above this
     ALLOWLIST = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-:. "
 

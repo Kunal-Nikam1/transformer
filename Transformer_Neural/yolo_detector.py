@@ -55,7 +55,7 @@ class YOLODetector:
         model_path: str = YOLO_MODEL_PATH,
         device: int = 0,
         enable_ocr: bool = True,
-        ocr_every_n: int = 3,
+        ocr_every_n: int = 75,
     ):
         print(f"[YOLO] Initializing YOLOv8 model from: {model_path}")
         if not os.path.exists(model_path):
@@ -94,16 +94,7 @@ class YOLODetector:
         search_region: str = "full",
         force: bool = False,                 # True = always run OCR (skip throttling)
     ) -> Optional[Dict]:
-        """
-        Step 1: Detect the Asset ID (TR-1, TR-2, CB-1, CS-02) using ONLY ocr_asset_id.
-        No YOLO tag boxes and no bounding-box verification are used.
-
-        OCR runs on every `ocr_every_n`-th call (default: every 3rd frame). On the
-        frames in between, the most recent OCR result is returned instantly.
-
-        Returns dict with asset_id, asset_type, tag_class, conf, ocr_conf, ocr_texts,
-        bbox, verified if an ID is read, else None.
-        """
+      
         if self.ocr_detector is None:
             print("[WARN] OCR engine unavailable - cannot detect asset ID.")
             return None

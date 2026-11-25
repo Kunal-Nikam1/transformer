@@ -1,22 +1,3 @@
-"""
-TCS Autonomous Substation Asset Inspection System.
-Robot-Optimized Live Camera Inspection Pipeline (YOLOv8 + NVIDIA GPU).
-
-Designed for Mobile Robots with Shaking & Vibration:
-1. No Rigid Alignment: The camera can shake and move; Asset IDs are detected anywhere in frame.
-2. 0.5-Second Temporal Lock: Holds and verifies the Asset ID for 0.5 seconds with a motion-tolerant
-   grace window, compensating for camera jitter.
-3. Automatic Corner-Based Equipment Cropping:
-   - Once locked, the system automatically detects the equipment's physical corners and
-     contour boundaries, cropping out surrounding room/background walls and floors.
-   - YOLO runs defect detection strictly on this cropped equipment image.
-4. Consecutively Same Asset Protection:
-   - Tests if the same asset remains in view after inspection (e.g., while the robot is driving past).
-   - Prevents duplicate re-inspection until the robot has navigated away to the next asset.
-5. Captures raw image to captures/ and annotated image to annotated/.
-6. Progresses through 4 assets, then automatically compiles the formal TCS PDF report.
-"""
-
 import os
 import sys
 import time
@@ -42,11 +23,7 @@ def auto_crop_equipment_by_corners(
     tag_bbox: Optional[List[int]] = None,
     component_bboxes: Optional[List[List[int]]] = None,
 ) -> Tuple[np.ndarray, Tuple[int, int, int, int]]:
-    """
-    Automatically detects the equipment's physical corners and boundary in the frame,
-    cropping out surrounding room, walls, and floor.
-    Returns: (cropped_img, (x1, y1, x2, y2))
-    """
+  
     fh, fw = frame.shape[:2]
 
     # Strategy 1: Contour & Corner boundary detection
@@ -136,12 +113,12 @@ class LiveCamInspector:
 
     def __init__(
         self,
-        camera_index: int = 1,
+        camera_index: int = 4,
         batch_size: int = BATCH_SIZE,
         device: int = 0,
         tag_conf: float = 0.35,
         defect_conf: float = 0.15,
-        lock_duration_sec: float = 0.5,
+        lock_duration_sec: float = 4.0,
     ):
         self.camera_index = camera_index
         self.batch_size = batch_size
@@ -149,16 +126,6 @@ class LiveCamInspector:
         self.tag_conf = tag_conf
         self.defect_conf = defect_conf
         self.lock_duration_sec = lock_duration_sec
-
-        print("=" * 68)
-        print("  TCS AUTONOMOUS ROBOT LIVE CAMERA ASSET INSPECTION SYSTEM")
-        print(f"  Camera Index      : {camera_index} (DirectShow)")
-        print(f"  Execution Unit    : NVIDIA GPU (CUDA device {device})")
-        print(f"  Lock Duration     : {lock_duration_sec}s continuous lock (Shake-Tolerant)")
-        print(f"  Equipment Crop    : Automatic Corner & Contour Boundary Crop")
-        print(f"  Consecutive Test  : Active (prevents duplicate logs while robot passes)")
-        print(f"  Report Trigger    : After every {batch_size} assets inspected")
-        print("=" * 68)
 
         # Initialize detector and report generator
         self.detector = YOLODetector(device=device)
@@ -188,17 +155,25 @@ class LiveCamInspector:
     def open_camera(self) -> cv2.VideoCapture:
         """Open camera with DirectShow backend for Windows."""
         print(f"\n[CAM] Connecting to Camera Index {self.camera_index}...")
-        cap = cv2.VideoCapture(self.camera_index, cv2.CAP_DSHOW)
+        cap = cv2.VideoCapture(5 , cv2.CAP_V4L2)
+        
+        #cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
+        #cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
         if not cap.isOpened():
             print(f"[WARN] Failed to open Camera {self.camera_index} with CAP_DSHOW. Retrying CAP_ANY...")
-            cap = cv2.VideoCapture(self.camera_index)
+            cap = cv2.VideoCapture(5 , cv2.CAP_V4L2)
 
         if not cap.isOpened():
             print(f"[ERROR] Could not open camera {self.camera_index}. Please verify connection.")
             return None
 
+        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"YUYV"))
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+        cap.set(cv2.CAP_PROP_FPS, 30)
+
+       	# cap.set(cv2.CAP_PROP_FRAME_WIDTH, 800)
+       	# cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 600)
         w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         print(f"[CAM] Camera connected. Resolution: {w}x{h}")
@@ -216,22 +191,6 @@ class LiveCamInspector:
 
         prev_time = time.time()
         fps = 0.0
-
-        print("\n" + "=" * 68)
-        print("  ROBOT INSPECTION SYSTEM ACTIVE")
-        print("  Workflow:")
-        print("    1. Robot points camera towards an asset (shaking/motion tolerated)")
-        print("    2. Asset ID tag is spotted anywhere in frame")
-        print(f"    3. System holds & tracks tag for {self.lock_duration_sec}s to confirm ID")
-        print("    4. At 2.0s: Automatically captures frame, crops equipment corners,")
-        print("       runs YOLO defect analysis, saves to captures/ & annotated/")
-        print("    5. Consecutive check holds until robot navigates away from that asset")
-        print("    6. Progresses until 4 assets are logged -> TCS PDF Report auto-generated!")
-        print("  Controls:")
-        print("    [SPACE] / [ENTER] : Force Capture & Inspect immediately")
-        print("    [R]               : Reset Current Inspection Batch")
-        print("    [Q] / [ESC]       : Quit")
-        print("=" * 68 + "\n")
 
         while True:
             # Handle post-inspection freeze display
@@ -452,7 +411,7 @@ class LiveCamInspector:
             display, "TCS ROBOT VISION | AUTONOMOUS PATROL", (15, 24),
             cv2.FONT_HERSHEY_DUPLEX, 0.58, (255, 255, 255), 2
         )
-        sub_title = f"GPU: RTX 4060  |  YOLO: {yolo_lat:.1f}ms  |  FPS: {fps:.1f}  |  Mode: Auto-Crop + 2s Lock"
+        sub_title = f"  YOLO: {yolo_lat:.1f}ms  |  FPS: {fps:.1f}  |  Mode: Auto-Crop + 2s Lock"
         cv2.putText(
             display, sub_title, (15, 46),
             cv2.FONT_HERSHEY_SIMPLEX, 0.42, (180, 210, 255), 1
@@ -470,14 +429,14 @@ class LiveCamInspector:
         if tag_bbox is not None and not is_consecutive_same:
             tx1, ty1, tx2, ty2 = tag_bbox
             # Draw dynamic tracking reticle around the tag
-            reticle_color = (0, 200, 255) if state == "LOCKING" else (0, 255, 0)
-            cv2.rectangle(display, (tx1, ty1), (tx2, ty2), reticle_color, 2)
+            #reticle_color = (0, 200, 255) if state == "LOCKING" else (0, 255, 0)
+           # cv2.rectangle(display, (tx1, ty1), (tx2, ty2), reticle_color, 2)
 
-            tag_label = f"ID: {candidate_id if candidate_id else 'DETECTED'} [OCR VERIFIED]"
-            cv2.putText(
-                display, tag_label, (tx1, max(75, ty1 - 8)),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.5, reticle_color, 2
-            )
+           # tag_label = f"ID: {candidate_id if candidate_id else 'DETECTED'} [OCR VERIFIED]"
+            #cv2.putText(
+             #   display, tag_label, (tx1, max(75, ty1 - 8)),
+              #  cv2.FONT_HERSHEY_SIMPLEX, 0.5, reticle_color, 2
+            #)
 
             if state == "LOCKING":
                 # Progress bar underneath the tag
@@ -643,7 +602,7 @@ def main():
     parser.add_argument(
         "--lock-time",
         type=float,
-        default=0.5,
+        default=4.0,
         help="Lock duration in seconds before capturing & inspecting (default: 2.0)"
     )
 
